@@ -1,0 +1,123 @@
+# Shared base for every spec in this repository (starship, the cross-shell prompt).
+#
+# NOT a spec: it has no name/target/source and is never loaded on its own.
+# Everything a package owns — name, target, source, assets, asset_type,
+# metadata, catalog, tests, versions, announce, annotations — stays in that
+# package's own mirror.yml.
+#
+# ⚠️ `extends:` is a SHALLOW merge of top-level keys. A spec that sets a key
+# below replaces that block OUTRIGHT — there is no per-key merge. `platforms:`
+# is where this bites: it carries BOTH the runner matrix and the container
+# legs, so a child that restates it to tweak one runner silently drops every
+# `containers:` entry. Nothing reds — the legs simply stop existing, and every
+# os.features claim in that spec goes back to being merely asserted. So
+# `platforms:` lives HERE and starship/mirror.yml deliberately does not
+# restate it.
+
+skip_prereleases: true
+cascade: true
+
+# The fleet rule for a new package. A cascade tag (`latest`, `X`, `X.Y`)
+# re-points on every re-publish; without a build segment the new manifest
+# reuses the bare version tag and orphans the prior digest for registry GC,
+# breaking any `@sha256:` pin in a consumer's ocx.lock. The `none` exception
+# applies only where upstream versions ALREADY carry semver build metadata
+# (double-stamping is rejected and silently empties the mirror) — starship tags
+# bare semver behind a `v` prefix (`v1.26.0` → `1.26.0`), so it does not apply.
+build_timestamp: date
+
+verify:
+  github_asset_digest: true
+
+# Asset filenames carry NO version string — `starship-x86_64-apple-darwin.tar.gz`
+# is byte-for-byte the same NAME on every release. Digest verification is
+# therefore doing real work here: it is the only thing that distinguishes the
+# 1.25.0 tarball from the 1.26.0 one, since the URL differs only in the tag
+# path segment. Turning it off would make a mis-resolved release undetectable.
+
+concurrency:
+  # Assets are ~4-5 MB single-binary archives.
+  max_downloads: 8
+  max_bundles: 4
+  max_pushes: 2
+  rate_limit_ms: 100
+  max_retries: 3
+  compression_threads: 0
+
+# Default for a new package here. A package whose PATH entry is bare
+# `${installPath}` — i.e. whose archive is flat, with no subdirectory to scan —
+# MUST override this with `"off"` and hand-list `binaries`, or spec load fails
+# at exit 65. `starship` is exactly that case; see the note in
+# starship/mirror.yml.
+bin_scan: auto
+
+# ─── Platform matrix ────────────────────────────────────────────────────────
+#
+# `os.features` states what an artifact REQUIRES OF THE HOST — it is not a
+# label for how it was built, and a musl target TRIPLE is not a musl
+# requirement. Upstream ships BOTH a `-gnu` and a `-musl` x86_64 Linux asset,
+# and musl only for every other Linux arch. Both arches were byte-measured on
+# the v1.25.0 floor AND on v1.26.0 (evidence pasted above starship/mirror.yml's
+# `assets:`): the musl builds have no PT_INTERP and no DT_NEEDED — musl is
+# linked IN, not linked AGAINST — while the gnu build is dynamically linked
+# against five glibc shared objects.
+#
+# This mirror carries the STATIC musl build on both Linux arches under BARE
+# keys. That is the skill's "fewest artifacts" row: a static binary requires
+# nothing of the host, so one artifact per arch serves glibc and musl userlands
+# alike, and the matrix stays symmetric with arm64 — for which upstream ships
+# no gnu asset at all, so a `+libc.glibc` key could never be honoured there.
+# Tagging the static builds `+libc.musl` would be a FALSE REQUIREMENT that hid
+# the package from every glibc host it in fact runs on.
+#
+# A bare key claims universality, so it must prove it: ubuntu (glibc) + alpine
+# (musl) + fedora (different glibc vintage). The alpine leg IS the proof —
+# drop it and the universal claim is merely asserted.
+#
+# A future package here whose libc measurement differs must restate this whole
+# block in its own spec — see the shallow-merge warning at the top.
+#
+# STAGED ROLLOUT (skill Phase 10): macOS minutes cost 10× linux and Windows 2×,
+# and a DECLARED-but-unmatched platform does not quietly self-skip — it boots a
+# real runner and reports SUCCESS having tested nothing. So each pass uncomments
+# the platform key HERE and its asset regex in starship/mirror.yml together,
+# then regenerates CI. Pass 1 = linux, pass 2 = darwin, pass 3 = windows.
+platforms:
+  linux/amd64:
+    runner: ubuntu-latest
+    containers:
+      - { image: "ubuntu:24.04", shell: bash }
+      - { image: "alpine:3.20",  shell: sh }
+      - { image: "fedora:40",    shell: bash }
+  linux/arm64:
+    # arm64 container legs run natively — no qemu — so the runner arch must
+    # match the platform or the renderer reds the leg up front.
+    runner: ubuntu-24.04-arm
+    containers:
+      - { image: "ubuntu:24.04", shell: bash }
+      - { image: "alpine:3.20",  shell: sh }
+      - { image: "fedora:40",    shell: bash }
+  # darwin/amd64:
+  #   # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 — GitHub's
+  #   # native macos-13 Intel pool is exhausted and deadlocks the push job.
+  #   runner: macos-14
+  #   prefix: ["arch", "-x86_64"]
+  # darwin/arm64:
+  #   runner: macos-14
+  #   shell: bash
+  # windows/amd64:
+  #   runner: windows-latest
+  #   shell: pwsh
+  # windows/arm64:
+  #   # Native arm64 Windows runner — the amd64 pool cannot execute an ARM64 PE.
+  #   # Upstream does ship starship-aarch64-pc-windows-msvc.zip, so this leg
+  #   # resolves an asset and must exist here or push reds it as missing_junit.
+  #   runner: windows-11-arm
+  #   shell: pwsh
+  # No `containers:` on darwin or windows — those runners have no Linux
+  # container engine, and the key is rejected at spec load.
+
+notify:
+  discord:
+    webhook_secret: OCX_MIRROR_DISCORD_HOOK
+    user_id: "227748867204972545"  # pinged in-message on failures

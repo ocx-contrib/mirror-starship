@@ -1,0 +1,178 @@
+# ⚠ `extends:` is a SHALLOW merge of TOP-LEVEL KEYS. Setting a key here
+# REPLACES the base's block outright — there is no per-key merge. `platforms:`
+# is deliberately NOT restated below: it carries the container legs that make
+# this spec's bare Linux keys honest, and restating it to tweak one runner
+# would drop them all without reddening anything.
+extends: ../mirror-base.yml
+
+name: starship
+
+# Logical index package `starship/starship` at the physical path
+# `ghcr.io/ocx-contrib/starship/starship` — slash segments, never
+# hyphen-flattened. Two segments always; the GitHub org IS the project's own
+# brand, so org and tool coincide. The first segment must be this repo's own
+# GitHub owner: GITHUB_TOKEN only authorises packages owned by the repo the
+# workflow runs in.
+target:
+  registry: ghcr.io
+  repository: ocx-contrib/starship/starship
+
+source:
+  type: github_release
+  owner: starship
+  repo: starship
+  # starship TAGS carry a `v` prefix (`v1.26.0`). The ASSET FILENAMES carry no
+  # version at all (see the scope note below), so the tag is the ONLY source of
+  # the version. The capture group strips the `v` so the published version is
+  # bare semver.
+  tag_pattern: "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
+
+# ─── libc gate (Phase 3.5) — the evidence, not the conclusion ───────────────
+#
+# starship is Rust, and upstream ships BOTH `-gnu` and `-musl` for x86_64 but
+# musl ONLY for aarch64. Neither the language nor the triple is the verdict: a
+# `-musl` asset is not automatically static. Measured on v1.26.0 AND on the
+# v1.25.0 floor:
+#
+#   $ file x86_64-unknown-linux-musl/starship
+#   ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked,
+#   stripped
+#   $ file aarch64-unknown-linux-musl/starship
+#   ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically
+#   linked, stripped
+#   $ readelf -l <musl bin> | grep -c INTERP   → 0        (both arches, both versions)
+#   $ readelf -d <musl bin> | grep NEEDED      → (none)   (both arches, both versions)
+#
+#   $ file x86_64-unknown-linux-gnu/starship
+#   ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically
+#   linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 2.6.32,
+#   stripped
+#   $ readelf -d <gnu bin> | grep NEEDED
+#   libc.so.6  libgcc_s.so.1  libpthread.so.0  libm.so.6  libdl.so.2
+#
+# No PT_INTERP and no DT_NEEDED on either musl build: those artifacts require
+# nothing of the host, so both Linux keys are BARE — no `+libc.*` suffix.
+#
+# WHY THE GNU ASSET IS NOT ALSO CARRIED. The skill's fallback is bare-static
+# plus `linux/amd64+libc.glibc`, and it is a FALLBACK, taken only where the gnu
+# build reaches capability the static one lacks. The usual such capability is
+# NSS-dependent resolution (a static musl binary ignores nsswitch.conf) —
+# unreachable here: starship is a local prompt renderer whose explicit upstream
+# design goal is sub-millisecond rendering, and it makes no network calls. A
+# second key would also be ASYMMETRIC — upstream ships no aarch64 gnu asset, so
+# arm64 could never carry the matching key — and upstream itself treats musl as
+# its primary Linux artifact, shipping musl-only for aarch64, armv7, i686 and
+# riscv64. One static artifact per arch, under a bare key, covers both
+# userlands. Container legs (ubuntu + alpine + fedora) live in
+# ../mirror-base.yml and are what turn that claim into evidence.
+#
+# ─── Scope (verified against v1.25.0 the floor, v1.25.1, and v1.26.0) ───────
+#
+# ⚠ ASSET NAMES CARRY NO VERSION STRING. `starship-x86_64-apple-darwin.tar.gz`
+# is the identical filename on every release — so the `-.*-` wildcard shape
+# most Rust mirrors in this fleet use (`just-.*-x86_64-…`) would match ZERO
+# assets here and silently skip the platform. Every pattern below is an EXACT
+# ANCHORED LITERAL for that reason. It also means the version can only ever be
+# read from the release tag, never inferred from a filename.
+#
+# Upstream also publishes, and this mirror deliberately does not carry:
+#   starship-x86_64-unknown-linux-gnu.tar.gz    — glibc build; see the libc note
+#   starship-arm-unknown-linux-musleabihf.tar.gz — no OCX linux/arm platform
+#   starship-i686-unknown-linux-musl.tar.gz     — no OCX linux/386 platform
+#   starship-i686-pc-windows-msvc.zip           — no OCX windows/386 platform
+#   starship-riscv64gc-unknown-linux-musl.tar.gz — no OCX platform. NEW in
+#                                   v1.26.0, absent at v1.25.0/v1.25.1 — proof
+#                                   the asset set is not frozen across this
+#                                   range, and the reason every release in it
+#                                   was re-listed rather than sampled.
+#   starship-x86_64-unknown-freebsd.tar.gz      — no OCX platform (OCX os keys
+#                                   are linux/darwin/windows only)
+#   starship-*-pc-windows-msvc.msi              — Windows INSTALLER, shipped for
+#                                   every windows arch ALONGSIDE the .zip. An
+#                                   under-anchored pattern matches both and
+#                                   fails as an ambiguity error; the `\.zip$`
+#                                   anchor is what keeps the pair apart.
+#   starship-*-apple-darwin.pkg                 — macOS installer. Present on
+#                                   v1.25.1 ONLY, absent on v1.25.0 and
+#                                   v1.26.0; same anchoring argument as .msi.
+#   *.sha256                                    — checksum sidecars, one per
+#                                   asset, so an unanchored tail doubles EVERY
+#                                   match
+#
+# Resolution verified BOTH ways on ALL THREE in-range releases: each of the six
+# patterns matches EXACTLY one asset, nothing else in the release matches any
+# of them, and every remaining asset is accounted for by a line above. A
+# pattern matching zero is silently skipped, not an error — it would yield a
+# green run with a missing platform.
+#
+# STAGED ROLLOUT: darwin/windows regexes stay commented until their pass, in
+# lockstep with the platform keys in ../mirror-base.yml — a declared platform
+# with no asset boots a real macos/windows runner and greens having tested
+# nothing.
+assets:
+  linux/amd64:
+    - "^starship-x86_64-unknown-linux-musl\\.tar\\.gz$"
+  linux/arm64:
+    - "^starship-aarch64-unknown-linux-musl\\.tar\\.gz$"
+  # darwin/amd64:
+  #   - "^starship-x86_64-apple-darwin\\.tar\\.gz$"
+  # darwin/arm64:
+  #   - "^starship-aarch64-apple-darwin\\.tar\\.gz$"
+  # windows/amd64:
+  #   - "^starship-x86_64-pc-windows-msvc\\.zip$"
+  # windows/arm64:
+  #   - "^starship-aarch64-pc-windows-msvc\\.zip$"
+
+# Every archive — tarball and zip alike — is FLAT and holds exactly ONE member:
+# `starship` (`starship.exe` on Windows) at the archive root, mode 0755, with no
+# wrapper directory and no sibling files. Verified with `tar tvf` / `unzip -l`
+# on v1.25.0 and v1.26.0. So strip_components 0 on every platform, the binary
+# lands at the content root, and one metadata.json (PATH = ${installPath})
+# serves all six.
+asset_type:
+  type: archive
+  strip_components: 0
+
+# `off`, overriding the base's `auto` — FORCED by the flat archive, not chosen.
+# The scan only inspects an interface-visible `${installPath}/<dir>` PATH
+# entry, and this archive has no subdirectory to point one at, so both `auto`
+# and `verify` fail spec load at exit 65:
+#
+#   bin_scan is enabled but metadata.json declares no interface-visible
+#   ${installPath}/<dir> PATH entry — the verification would inspect no file and
+#   pass green whatever the archive contains.
+#
+# The `binaries` list in metadata.json is therefore hand-maintained, exactly as
+# that error directs, and it is as short as a list gets: `starship` is the ONLY
+# member of the archive. Quoted so no YAML 1.1 reader folds the bare word into
+# boolean `false`.
+bin_scan: "off"
+
+metadata:
+  default: metadata.json
+
+catalog:
+  logo: logo.svg
+
+versions:
+  min: "1.25.0"
+  new_per_run: 5
+  poll_interval: "15 */6 * * *"
+
+tests:
+  # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and
+  # `catalog.logo` above, which resolve against this spec's own directory.
+  - name: smoke
+    script: starship/tests/smoke.star
+
+annotations:
+  # From the Phase 1.5 license gate:
+  #   $ gh api repos/starship/starship/license --jq '.license.spdx_id'
+  #   ISC
+  org.opencontainers.image.licenses: "ISC"
+
+announce:
+  # Spelled out, not derived from target.repository — the logical name and the
+  # physical path are related by convention only.
+  package: starship/starship
+  fork: ocx-contrib/index
