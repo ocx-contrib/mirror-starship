@@ -105,10 +105,11 @@ source:
 # pattern matching zero is silently skipped, not an error — it would yield a
 # green run with a missing platform.
 #
-# STAGED ROLLOUT: darwin/windows regexes stay commented until their pass, in
-# lockstep with the platform keys in ../mirror-base.yml — a declared platform
-# with no asset boots a real macos/windows runner and greens having tested
-# nothing.
+# These six were rolled out in three passes (linux → darwin → windows), each
+# uncommenting an asset regex HERE and its platform key in ../mirror-base.yml
+# together. Keep that lockstep for any future platform: a declared platform
+# with no matching asset does not quietly self-skip — it boots a real
+# macos/windows runner and reports SUCCESS having tested nothing.
 assets:
   linux/amd64:
     - "^starship-x86_64-unknown-linux-musl\\.tar\\.gz$"
@@ -118,10 +119,10 @@ assets:
     - "^starship-x86_64-apple-darwin\\.tar\\.gz$"
   darwin/arm64:
     - "^starship-aarch64-apple-darwin\\.tar\\.gz$"
-  # windows/amd64:
-  #   - "^starship-x86_64-pc-windows-msvc\\.zip$"
-  # windows/arm64:
-  #   - "^starship-aarch64-pc-windows-msvc\\.zip$"
+  windows/amd64:
+    - "^starship-x86_64-pc-windows-msvc\\.zip$"
+  windows/arm64:
+    - "^starship-aarch64-pc-windows-msvc\\.zip$"
 
 # Every archive — tarball and zip alike — is FLAT and holds exactly ONE member:
 # `starship` (`starship.exe` on Windows) at the archive root, mode 0755, with no

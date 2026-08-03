@@ -77,11 +77,12 @@ bin_scan: auto
 # A future package here whose libc measurement differs must restate this whole
 # block in its own spec — see the shallow-merge warning at the top.
 #
-# STAGED ROLLOUT (skill Phase 10): macOS minutes cost 10× linux and Windows 2×,
-# and a DECLARED-but-unmatched platform does not quietly self-skip — it boots a
-# real runner and reports SUCCESS having tested nothing. So each pass uncomments
-# the platform key HERE and its asset regex in starship/mirror.yml together,
-# then regenerates CI. Pass 1 = linux, pass 2 = darwin, pass 3 = windows.
+# Rolled out in three passes (skill Phase 10) — linux, then darwin, then
+# windows — because macOS minutes cost 10× linux and Windows 2×, and a
+# DECLARED-but-unmatched platform does not quietly self-skip: it boots a real
+# runner and reports SUCCESS having tested nothing. Each pass uncommented the
+# platform key HERE and its asset regex in starship/mirror.yml together, then
+# regenerated CI. Keep that lockstep for any platform added later.
 platforms:
   linux/amd64:
     runner: ubuntu-latest
@@ -105,15 +106,15 @@ platforms:
   darwin/arm64:
     runner: macos-14
     shell: bash
-  # windows/amd64:
-  #   runner: windows-latest
-  #   shell: pwsh
-  # windows/arm64:
-  #   # Native arm64 Windows runner — the amd64 pool cannot execute an ARM64 PE.
-  #   # Upstream does ship starship-aarch64-pc-windows-msvc.zip, so this leg
-  #   # resolves an asset and must exist here or push reds it as missing_junit.
-  #   runner: windows-11-arm
-  #   shell: pwsh
+  windows/amd64:
+    runner: windows-latest
+    shell: pwsh
+  windows/arm64:
+    # Native arm64 Windows runner — the amd64 pool cannot execute an ARM64 PE.
+    # Upstream does ship starship-aarch64-pc-windows-msvc.zip, so this leg
+    # resolves an asset and must exist here or push reds it as missing_junit.
+    runner: windows-11-arm
+    shell: pwsh
   # No `containers:` on darwin or windows — those runners have no Linux
   # container engine, and the key is rejected at spec load.
 
