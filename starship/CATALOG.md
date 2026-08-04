@@ -30,18 +30,9 @@ The Nerd Font glyphs the default preset uses are not part of an upstream
 release archive and are not mirrored — install a patched font, or use
 `starship preset plain-text-symbols` for a font-independent prompt.
 
-## Install with ocx
+## Shell setup
 
-```sh
-ocx install ocx.sh/starship/starship
-```
-
-```sh
-# or pin a specific version
-ocx install ocx.sh/starship/starship:1.26.0
-```
-
-Then add the init line for your shell, e.g. for bash:
+Add the init line for your shell, e.g. for bash:
 
 ```sh
 eval "$(starship init bash)"
